@@ -12,12 +12,15 @@ using namespace std::string_view_literals;
 static constexpr std::string filename{"day_8_data.txt"};
 
 int main(){
+    // Open the files and extract the first line
     std::ifstream text_file(filename);
     std::string instructions;
     std::getline(text_file, instructions);
+
+    // Skip over empty line
     text_file.ignore(std::numeric_limits<std::streamsize>::max(), '\n');
 
-    bool first = true;
+    // Load the nodes from the rest of the input into a map
     std::unordered_map<std::string, std::pair<std::string, std::string>> desert_map;
     for (std::string line; std::getline(text_file, line);){
         std::string label = line.substr(0, 3);
