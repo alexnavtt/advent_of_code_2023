@@ -36,7 +36,7 @@ int main(){
         size_t num_steps = 0;
         for (char instruction : std::views::repeat(instructions) | std::views::join){
             if (termination(current)) break;
-            auto [left, right] = desert_map.at(current);
+            const auto& [left, right] = desert_map.at(current);
             current = (instruction == 'L' ? left : right);
             num_steps++;
         }
