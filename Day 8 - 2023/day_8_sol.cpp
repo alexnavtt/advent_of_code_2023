@@ -56,7 +56,7 @@ int main(){
         | std::views::filter(endsWithA)
         | std::views::transform(steps_to_Z),
 
-        [](size_t first, size_t second) {return std::lcm(first, second);}
+        std::lcm<size_t, size_t>
     );
     std::println("Minimum steps is {}", walk_steps.value());
 
