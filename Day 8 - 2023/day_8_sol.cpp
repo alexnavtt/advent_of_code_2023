@@ -46,14 +46,19 @@ int main(){
     std::println("Took {} steps", num_steps);
 
     // Problem 2 solution
-    auto endsWithA = [](const std::string& s){return s.ends_with("A");};
-    auto endsWithZ = [](const std::string& s){return s.ends_with("Z");};
+    auto endsWithA  = [](const std::string& s){return s.ends_with("A");};
+    auto endsWithZ  = [](const std::string& s){return s.ends_with("Z");};
+    auto steps_to_Z = std::bind(walkToEnd, std::placeholders::_1, endsWithZ);
 
-    size_t walk_steps = 1;
-    for (auto start_point : desert_map | std::views::keys | std::views::filter(endsWithA)){
-        walk_steps = std::lcm(walk_steps, walkToEnd(start_point, endsWithZ));
-    }
-    std::println("Minimum steps is {}", walk_steps);
+    std::optional<size_t> walk_steps = std::ranges::fold_left_first(
+        desert_map 
+        | std::views::keys
+        | std::views::filter(endsWithA)
+        | std::views::transform(steps_to_Z),
+
+        [](size_t first, size_t second) {return std::lcm(first, second);}
+    );
+    std::println("Minimum steps is {}", walk_steps.value());
 
     return 0;
 }
