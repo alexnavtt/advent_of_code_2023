@@ -46,10 +46,8 @@ int main(){
     for (auto [gal_idx, g1] : galaxy_indices | std::views::enumerate){
         for (auto g2 : galaxy_indices | std::views::drop(gal_idx+1)){
 
-            const size_t& xmin = std::min(g1.x, g2.x);
-            const size_t& xmax = std::max(g1.x, g2.x);
-            const size_t& ymin = std::min(g1.y, g2.y);
-            const size_t& ymax = std::max(g1.y, g2.y);
+            const auto [xmin, xmax] = std::minmax(g1.x, g2.x);
+            const auto [ymin, ymax] = std::minmax(g1.y, g2.y);
 
             auto extra_x = empty_col_indices | std::views::filter([xmin,xmax](size_t idx){
                     return idx == std::clamp<size_t>(idx, xmin, xmax);
