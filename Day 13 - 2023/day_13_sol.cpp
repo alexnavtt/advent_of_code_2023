@@ -37,23 +37,6 @@ bool checkSymmetryRow(R pattern, size_t idx, bool fix_smudge = false){
     return true;
 }
 
-template<std::ranges::common_range R>
-bool checkSymmetryCol(R pattern, size_t idx, bool fix_smudge = false){
-    // Transpose the pattern
-    const int line_length = pattern.front().size();
-    auto cols = views::iota(0, line_length) | views::transform(
-        [&](int i){
-            return pattern 
-            | views::join 
-            | views::drop(i) 
-            | views::stride(line_length);
-        }
-    );
-
-    // Pass to the row function
-    return checkSymmetryRow(cols, idx, fix_smudge);
-}
-
 int main(){
     const bool part2 = true;
     std::string input_str = loadInput("day_13_data.txt");
