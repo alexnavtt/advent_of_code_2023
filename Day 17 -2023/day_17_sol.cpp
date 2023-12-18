@@ -1,16 +1,23 @@
-#include <list>
 #include <print>
 #include <array>
+#include <queue>
 #include <ranges>
 #include <string>
 #include <chrono>
 #include <optional>
-#include <algorithm>
 #include <unordered_map>
 #include "load_input.hpp"
 
 namespace views = std::views;
 namespace ranges = std::ranges;
+
+// Problem configuration
+static constexpr bool part2 = true;
+static constexpr int min_steps = part2 ? 4 : 0;
+static constexpr int max_steps = part2 ? 10 : 3;
+
+// Set up grid directions
+// ------------------------------------------------------------------------------------------------
 
 enum Direction{
     NORTH,
@@ -29,9 +36,16 @@ std::string to_string(Direction dir){
     std::unreachable();
 }
 
+// Define the grid state
+// ------------------------------------------------------------------------------------------------
+
 struct Index{
     int xi;
     int yi;
+
+    bool operator==(const Index& other) const{
+        return xi == other.xi && yi == other.yi;
+    }
 };
 
 struct State{
@@ -39,7 +53,6 @@ struct State{
     int cost;
     Direction dir;
     uint8_t step_count;
-    State* parent = nullptr;
 };
 
 struct HashState{
@@ -52,17 +65,23 @@ struct HashState{
 // travelling the same direction for an identical number of steps
 struct EqualState{
     bool operator()(const State& s1, const State& s2) const{
-        return (s1.idx.xi     == s2.idx.xi    )
-            && (s1.idx.yi     == s2.idx.yi    )
+        return (s1.idx        == s2.idx       )
             && (s1.dir        == s2.dir       )
             && (s1.step_count == s2.step_count);
     }
 };
 
-uint8_t asInt(char c){
-    return c - '0';
-}
+// Use a greater than comparison to get min out of std::priority_queue
+struct CostGreater{
+    bool operator()(const State& s1, const State& s2) const {
+        return s1.cost > s2.cost;
+    }
+};
 
+// Logic for deciding where to go next
+// ------------------------------------------------------------------------------------------------
+
+// Determine which directions can be turned towards
 std::pair<Direction, Direction> perpendicularDirections(Direction dir){
     switch (dir){
         case NORTH:
@@ -75,6 +94,7 @@ std::pair<Direction, Direction> perpendicularDirections(Direction dir){
     std::unreachable();
 }
 
+// Update state in a given direction
 Index travel(Index idx, Direction dir){
     switch(dir){
         case NORTH: 
@@ -92,13 +112,15 @@ Index travel(Index idx, Direction dir){
     return idx;
 }
 
-bool inRange(const Index& idx, const auto& grid){
-    if (grid.empty()) return false;
-    return idx.xi >= 0 && idx.yi >=0 && idx.yi < grid.size() && idx.xi < grid.front().size();
-}
-
+// Gather all valid neighbours considering grid bounds and step limits
 std::array<std::optional<State>, 3> getNeighbours(const State& s, const std::vector<std::vector<uint8_t>>& grid){
     std::array<std::optional<State>, 3> ret_val{};
+    if (grid.empty()) return ret_val;
+
+    // Bounds checking lambda
+    auto inRange = [&grid](const Index& idx) -> bool {
+        return idx.xi >= 0 && idx.yi >=0 && idx.yi < grid.size() && idx.xi < grid.front().size();
+    };
 
     // Get the three potential next states
     auto [side1, side2] = perpendicularDirections(s.dir);
@@ -106,8 +128,8 @@ std::array<std::optional<State>, 3> getNeighbours(const State& s, const std::vec
     Index step1   = travel(s.idx, side1);
     Index step2   = travel(s.idx, side2);
 
-    // Check for validity
-    if (s.step_count < 10 && inRange(forward, grid)) {
+    // Check for validity moving forward
+    if (s.step_count < max_steps && inRange(forward)) {
         ret_val[0] = State{
             .idx        = forward,
             .cost       = s.cost + grid[forward.yi][forward.xi], 
@@ -116,7 +138,8 @@ std::array<std::optional<State>, 3> getNeighbours(const State& s, const std::vec
         };
     }
 
-    if ((s.step_count == 0 || s.step_count >= 4) && inRange(step1, grid)){
+    // Check for validity turning to either side
+    if ((s.step_count == 0 || s.step_count >= min_steps) && inRange(step1)){
         ret_val[1] = State{
             .idx        = step1,
             .cost       = s.cost + grid[step1.yi][step1.xi], 
@@ -125,7 +148,7 @@ std::array<std::optional<State>, 3> getNeighbours(const State& s, const std::vec
         };
     }
 
-    if ((s.step_count == 0 || s.step_count >= 4) && inRange(step2, grid)){
+    if ((s.step_count == 0 || s.step_count >= min_steps) && inRange(step2)){
         ret_val[2] = State{
             .idx        = step2,
             .cost       = s.cost + grid[step2.yi][step2.xi], 
@@ -137,61 +160,51 @@ std::array<std::optional<State>, 3> getNeighbours(const State& s, const std::vec
     return ret_val;
 }
 
+// ------------------------------------------------------------------------------------------------
+// ------------------------------------------------------------------------------------------------
+
 int main(){
     std::string input_str = loadInput("day_17_data.txt");
-    auto start_time = std::chrono::steady_clock::now();
+    const auto start_time = std::chrono::steady_clock::now();
 
     // Convert the input to a vector of vectors of uint8_t's
-    auto grid = input_str 
+    const auto grid = input_str 
         | views::split('\n')
         | views::transform([](auto line){
             return line 
-                | views::transform(asInt)
+                | views::transform([](char c){return static_cast<uint8_t>(c - '0');})
                 | ranges::to<std::vector>();
         })
         | ranges::to<std::vector>();
 
-    // For simplicity: BFS
+    // Use Dijkstra
+    std::priority_queue<State, std::vector<State>, CostGreater> queue;
     std::unordered_map<State, int, HashState, EqualState> visited_states;
-    std::list<State> frontier;
 
     const Index goal_index{(int)(grid.front().size()-1), (int)(grid.size() - 1)};
-    State* final_state = nullptr;
 
     // Start it off with the initial state
-    frontier.push_back(State{.idx = Index{0, 0}, .cost = 0, .dir = EAST, .step_count = 0});
-    for (State& curr : frontier){
+    queue.push(State{.idx = Index{0, 0}, .cost = 0, .dir = EAST, .step_count = 0});
+    while (!queue.empty()){
+        // Get the path with the current lowest cost
+        const State curr = queue.top();
 
-        if (curr.idx.xi == goal_index.xi 
-         && curr.idx.yi == goal_index.yi 
-         && curr.step_count >= 4
-         && (final_state == nullptr || curr.cost < final_state->cost))
-        {
-            final_state = &curr;
-        }
+        // Check if we've found the goal
+        if (curr.idx == goal_index && curr.step_count >= min_steps) break;
 
+        queue.pop();
         for (std::optional<State>& candidate : getNeighbours(curr, grid)){
-            if (!candidate.has_value()) continue;
+            if ( !candidate.has_value() || 
+                (visited_states.contains(*candidate) && candidate->cost >= visited_states.at(*candidate))
+            ) continue;
 
-            bool update = (!visited_states.contains(*candidate)) || (candidate->cost < visited_states.at(*candidate));
-            if (update){
-                candidate->parent = &curr;
-                visited_states[*candidate] = candidate->cost;
-                frontier.push_back(*candidate);
-            }
+            visited_states[*candidate] = candidate->cost;
+            queue.push(*candidate);
         }
     }
 
-    std::println("Min cost is {} and the final state is at ({}, {})", final_state->cost, final_state->idx.xi, final_state->idx.yi);
-    while (final_state->parent){
-        grid[final_state->idx.yi][final_state->idx.xi] = 0;
-        final_state = final_state->parent;
-    }
-
-    for (auto row : grid){
-        std::println("{}", row | views::transform([](uint8_t i){return std::to_string(i);}) | views::join | ranges::to<std::string>());
-    }
-
-    auto stop_time = std::chrono::steady_clock::now();
+    const auto stop_time = std::chrono::steady_clock::now();
+    const State& final_state = queue.top();
+    std::println("Min cost is {} and the final state is at ({}, {})", final_state.cost, final_state.idx.xi, final_state.idx.yi);
     std::println("Calculations took {} milliseconds", std::chrono::duration_cast<std::chrono::milliseconds>(stop_time - start_time).count());
 }
